@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "node-3tier.fullname" . }}-db-exporter
+  labels:
+{{ include "node-3tier.labels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "node-3tier.name" . }}-db-exporter
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "node-3tier.name" . }}-db-exporter
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+      containers:
+        - name: {{ .Chart.Name }}-cloudsql-proxy
+          image: gcr.io/cloudsql-docker/gce-proxy:1.14
+          command: ["/cloud_sql_proxy",
+                    "-instances={{ required "A value is required for postgresql instance service name" .Values.instanceConnectionName }}=tcp:5432",
+            # If running on a VPC, the Cloud SQL proxy can connect via Private IP. See:
+            ## https://cloud.google.com/sql/docs/mysql/private-ip for more info.
+            #                    "-ip_address_types=PRIVATE",
+            #                    "-credential_file=/secrets/cloudsql/credentials.json"]
+            #          # [START cloudsql_security_context]
+                    "-ip_address_types=PRIVATE",
+                    "-credential_file=/secrets/cloudsql/credentials.json"]
+          securityContext:
+            runAsUser: 2  # non-root user
+            allowPrivilegeEscalation: false
+          # [END cloudsql_security_context]
+          volumeMounts:
+            - name: cloudsql-instance-credentials
+              mountPath: /secrets/cloudsql
+              readOnly: true
+          # [END proxy_container]
+        - name: {{ .Chart.Name }}-pg-exporter
+          image: "{{ .Values.image.dbExporter.repository }}:{{ .Values.image.dbExporter.tag }}"
+          imagePullPolicy: {{ .Values.image.dbExporter.pullPolicy }}
+          env:
+            - name: DATA_SOURCE_NAME
+              value: {{ required "A value is required for postgresql connection url" .Values.postgresqlUrl }}?sslmode=disable
+          ports:
+            - name: http
+              containerPort: 9187
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30

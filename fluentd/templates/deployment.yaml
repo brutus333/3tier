@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluentd-pubsub-loki
+  labels:
+    app: fluentd-pubsub-loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluentd-pubsub-loki
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fluentd-pubsub-loki
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      volumes:
+        - name: fluentd-config
+          configMap:
+            name: fluentd-config
+        - name: pubsub-fluentd-credentials
+          secret:
+            secretName: pubsub-fluentd-credentials
+      containers:
+        - name: fluentd
+          image: "{{ .Values.image.fluentd.repository }}:{{ .Values.image.fluentd.tag }}"
+          volumeMounts:
+            - mountPath: /etc/fluent
+              name: fluentd-config
+            - name: pubsub-fluentd-credentials
+              mountPath: /etc/gcloud
+              readOnly: true
+          command:
+            - /usr/local/bundle/bin/fluentd
+            - -v
+            - -c
+            - /etc/fluent/fluent.conf

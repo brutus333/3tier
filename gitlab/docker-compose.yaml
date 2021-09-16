@@ -1,0 +1,68 @@
+version: '3.7'
+
+services:
+  gitlab-web:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    hostname: gitlab-web
+    volumes:
+      - 'gitlab-config:/etc/gitlab'
+      - 'gitlab-logs:/var/log/gitlab'
+      - 'gitlab-data:/var/opt/gitlab'
+    ports:
+      - '22:22'
+      - '80:80'
+      - '443:443'
+      - '5050:5050'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        gitlab_rails['lfs_enabled'] = true
+        gitlab_rails['initial_root_password'] = 'password'
+        external_url 'http://mygitlab.local.com/'
+        registry_external_url 'https://mygitlab.local.com:5050'
+        registry['enable'] = true
+        unicorn['socket'] = '/opt/gitlab/var/unicorn/gitlab.socket'
+    networks:
+      gitlab-network:
+        aliases:
+          - mygitlab.local.com
+
+  gitlab-runner1:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner1
+    hostname: gitlab-runner1
+    volumes:
+      - 'gitlab-runner1-config:/etc/gitlab-runner:Z'
+      - 'docker-certs-ca:/certs/ca'
+      - 'docker-certs-client:/certs/client'
+    networks:
+      - gitlab-network
+
+
+  dind:
+    image: docker:dind
+    container_name: docker-in-docker
+    hostname: docker-daemon
+    privileged: true
+    entrypoint:
+      - dockerd
+    command:
+      - "--host=tcp://0.0.0.0:2375"
+      - "--insecure-registry=mygitlab.local.com:5050"
+    networks:
+      gitlab-network:
+        aliases:
+          - docker
+
+networks:
+  gitlab-network:
+    name: gitlab-network
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  docker-socket:
+  docker-certs-ca:
+  docker-certs-client:
+  gitlab-runner1-config:

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "node-3tier.fullname" . }}-test-connection"
+  labels:
+{{ include "node-3tier.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['{{ include "node-3tier.fullname" . }}-web:{{ .Values.service.port }}']
+  restartPolicy: Never

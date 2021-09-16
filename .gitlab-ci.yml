@@ -1,0 +1,59 @@
+build_image:
+  tags:
+    - shell
+  stage: build
+  script:
+    - gcloud auth configure-docker eu.gcr.io
+    - docker build --cache-from eu.gcr.io/node-3tier/web:latest --tag eu.gcr.io/node-3tier/web:$CI_COMMIT_SHORT_SHA --tag eu.gcr.io/node-3tier/web:latest web
+    - docker build --cache-from eu.gcr.io/node-3tier/api:latest --tag eu.gcr.io/node-3tier/api:$CI_COMMIT_SHORT_SHA --tag eu.gcr.io/node-3tier/api:latest api
+    - docker push eu.gcr.io/node-3tier/web:$CI_COMMIT_SHORT_SHA
+    - docker push eu.gcr.io/node-3tier/api:$CI_COMMIT_SHORT_SHA
+    - docker push eu.gcr.io/node-3tier/web:latest
+    - docker push eu.gcr.io/node-3tier/api:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_MERGE_REQUEST_ID
+
+test:
+  stage: test
+  services:
+    - name: postgres:latest
+      alias: db
+    - name: eu.gcr.io/node-3tier/api:latest
+      alias: api
+    - name: eu.gcr.io/node-3tier/web:latest
+      alias: web
+  image: alpine:latest
+  variables:
+    FF_NETWORK_PER_BUILD: 1
+    GIT_STRATEGY: none
+    PORT: 80
+    DB: postgres://runner:password@db/nice_marmot
+    API_HOST: http://api
+    POSTGRES_DB: nice_marmot
+    POSTGRES_USER: runner
+    POSTGRES_PASSWORD: password
+    POSTGRES_HOST_AUTH_METHOD: trust
+  tags:
+    - docker
+  script:
+    - apk --update add curl
+    - curl -v --silent --show-error --fail  http://api/api/status
+    - curl -v --silent --show-error --fail  http://web
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+
+deploy:
+  stage: deploy
+  cache:
+    untracked: true
+  script:
+    - gcloud container clusters get-credentials production --region europe-west1 --project node-3tier || exit 0
+    - terraform init terraform/
+    - >-
+      terraform apply --auto-approve --var image_api_tag=$CI_COMMIT_SHORT_SHA
+      --var image_web_tag=$CI_COMMIT_SHORT_SHA terraform/
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+  tags:
+    - shell

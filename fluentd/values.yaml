@@ -1,0 +1,15 @@
+gcloud:
+  project:
+  key:
+  pubsub:
+    topic:
+    subscription:
+loki:
+  url:
+  username:
+  password:
+image:
+  fluentd:
+    repository: eu.gcr.io/node-3tier/fluentd-loki-gcloud-pubsub
+    tag: latest
+    pullPolicy: IfNotPresent

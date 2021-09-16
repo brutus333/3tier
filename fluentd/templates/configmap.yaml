@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+data:
+  fluent.conf: |
+    <source>
+      @type gcloud_pubsub
+      tag gcp_sink.pull
+      project {{ .Values.gcloud.project }}
+      key {{ .Values.gcloud.key }}
+      topic {{ .Values.gcloud.pubsub.topic }}
+      subscription {{ .Values.gcloud.pubsub.subscription }}
+      max_messages 1000
+      return_immediately true
+      pull_interval 0.5
+      pull_threads 2
+      parse_error_action exception
+      enable_rpc true
+      rpc_bind 0.0.0.0
+      rpc_port 24680
+      <parse>
+        @type json
+      </parse>
+    </source>
+
+    <match gcp_sink.pull*>
+      @type loki
+      url {{ .Values.loki.url }}
+      username {{ .Values.loki.username }}
+      password {{ .Values.loki.password }}
+      extra_labels {"env":"production", "source": "gcp_sink"}
+      flush_interval 10s
+      flush_at_shutdown true
+      buffer_chunk_limit 1m
+    </match>
